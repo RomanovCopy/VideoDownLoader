@@ -2,6 +2,7 @@ using System.IO;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.RegularExpressions;
+using System.Collections.Concurrent;
 using VideoDownLoader.Models;
 
 namespace VideoDownLoader.Services;
@@ -25,7 +26,7 @@ public sealed class DownloaderService
     {
         if (!tools.IsReady)
         {
-            throw new InvalidOperationException("Сначала установите yt-dlp и FFmpeg.");
+            throw new InvalidOperationException("Сначала установите yt-dlp, FFmpeg и Deno.");
         }
 
         Directory.CreateDirectory(options.OutputDirectory);
@@ -41,6 +42,7 @@ public sealed class DownloaderService
 
         AddArguments(startInfo, tools, options);
         using var process = new Process { StartInfo = startInfo, EnableRaisingEvents = true };
+        var diagnosticLines = new ConcurrentQueue<string>();
 
         lock (_processLock)
         {
@@ -63,14 +65,14 @@ public sealed class DownloaderService
                         process.Kill(entireProcessTree: true);
                     }
                 }
-                catch (InvalidOperationException)
+                catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
                 {
                     // Процесс уже завершён.
                 }
             });
 
-            var outputTask = ReadOutputAsync(process.StandardOutput, progress);
-            var errorTask = ReadOutputAsync(process.StandardError, progress);
+            var outputTask = ReadOutputAsync(process.StandardOutput, progress, CaptureDiagnosticLine);
+            var errorTask = ReadOutputAsync(process.StandardError, progress, CaptureDiagnosticLine);
 
             await process.WaitForExitAsync(CancellationToken.None);
             await Task.WhenAll(outputTask, errorTask);
@@ -79,8 +81,17 @@ public sealed class DownloaderService
 
             if (process.ExitCode != 0)
             {
-                throw new InvalidOperationException(
-                    $"yt-dlp завершился с кодом {process.ExitCode}. Подробности находятся в журнале.");
+                throw new YtDlpException(process.ExitCode, YtDlpDiagnostics.Classify(diagnosticLines));
+            }
+
+            return;
+
+            void CaptureDiagnosticLine(string line)
+            {
+                diagnosticLines.Enqueue(line);
+                while (diagnosticLines.Count > 200 && diagnosticLines.TryDequeue(out _))
+                {
+                }
             }
         }
         finally
@@ -106,14 +117,14 @@ public sealed class DownloaderService
                     _activeProcess.Kill(entireProcessTree: true);
                 }
             }
-            catch (InvalidOperationException)
+            catch (Exception exception) when (exception is InvalidOperationException or System.ComponentModel.Win32Exception)
             {
                 // Процесс успел завершиться.
             }
         }
     }
 
-    private static void AddArguments(
+    internal static void AddArguments(
         ProcessStartInfo startInfo,
         ToolPaths tools,
         DownloadOptions options)
@@ -125,11 +136,30 @@ public sealed class DownloaderService
             "--windows-filenames",
             "--continue",
             "--part",
-            "--retries", "10",
-            "--fragment-retries", "10",
+            "--retries", "20",
+            "--fragment-retries", "20",
+            "--retry-sleep", "http:exp=1:20",
+            "--retry-sleep", "fragment:exp=1:20",
+            "--socket-timeout", "30",
+            "--sleep-requests", "1",
+            "--js-runtimes", $"deno:{tools.Deno}",
             "--paths", options.OutputDirectory,
             "--output", "%(title).180B [%(id)s].%(ext)s",
             "--ffmpeg-location", Path.GetDirectoryName(tools.Ffmpeg!)!);
+
+        if (options.CookieBrowser != CookieBrowser.None)
+        {
+            Add(startInfo, "--cookies-from-browser", options.CookieBrowser.ToString().ToLowerInvariant());
+        }
+
+        if (Uri.TryCreate(options.PoTokenProviderUrl, UriKind.Absolute, out var providerUri) &&
+            (providerUri.Scheme == Uri.UriSchemeHttp || providerUri.Scheme == Uri.UriSchemeHttps))
+        {
+            Add(startInfo,
+                "--plugin-dirs", Path.Combine(Path.GetDirectoryName(tools.YtDlp!)!, "plugins"),
+                "--extractor-args", $"youtubepot-bgutilhttp:base_url={providerUri.GetLeftPart(UriPartial.Authority)}",
+                "--extractor-args", "youtube:player_client=mweb");
+        }
 
         if (!options.DownloadPlaylist)
         {
@@ -141,25 +171,65 @@ public sealed class DownloaderService
             Add(startInfo, "--live-from-start");
         }
 
-        switch (options.Quality)
+        if (!string.IsNullOrWhiteSpace(options.SelectedFormatId))
         {
-            case "До 1080p":
-                Add(startInfo, "--format", "bv*[height<=1080]+ba/b[height<=1080]");
-                break;
-            case "До 720p":
-                Add(startInfo, "--format", "bv*[height<=720]+ba/b[height<=720]");
-                break;
-            case "Только аудио (MP3)":
-                Add(startInfo, "--format", "ba/b", "--extract-audio", "--audio-format", "mp3");
-                break;
-            default:
-                Add(startInfo, "--format", "bv*+ba/b");
-                break;
+            var expression = options.SelectedFormatHasVideo && !options.SelectedFormatHasAudio
+                ? $"{options.SelectedFormatId}+ba/{options.SelectedFormatId}"
+                : options.SelectedFormatId;
+            Add(startInfo, "--format", expression);
+        }
+        else
+        {
+            switch (options.Quality)
+            {
+                case QualityPreset.UpTo1080:
+                    Add(startInfo, "--format", "bv*[height<=1080]+ba/b[height<=1080]");
+                    break;
+                case QualityPreset.UpTo720:
+                    Add(startInfo, "--format", "bv*[height<=720]+ba/b[height<=720]");
+                    break;
+                case QualityPreset.AudioOnly:
+                    Add(startInfo, "--format", "ba/b");
+                    break;
+                default:
+                    Add(startInfo, "--format", "bv*+ba/b");
+                    break;
+            }
         }
 
-        if (!string.Equals(options.Quality, "Только аудио (MP3)", StringComparison.Ordinal))
+        if (options.Quality == QualityPreset.AudioOnly ||
+            (!options.SelectedFormatHasVideo && options.SelectedFormatHasAudio))
         {
-            Add(startInfo, "--merge-output-format", options.Container.ToLowerInvariant());
+            Add(startInfo,
+                "--extract-audio",
+                "--audio-format", options.AudioFormat.ToString().ToLowerInvariant());
+        }
+        else
+        {
+            var container = options.Container.ToString().ToLowerInvariant();
+            Add(startInfo, "--merge-output-format", container, "--remux-video", container);
+        }
+
+        if (options.DownloadSubtitles)
+        {
+            var languages = string.IsNullOrWhiteSpace(options.SubtitleLanguages)
+                ? "all"
+                : options.SubtitleLanguages.Trim();
+            Add(startInfo,
+                "--write-subs",
+                "--write-auto-subs",
+                "--sub-langs", languages,
+                "--embed-subs");
+        }
+
+        if (options.EmbedMetadata)
+        {
+            Add(startInfo, "--embed-metadata", "--embed-chapters");
+        }
+
+        if (options.EmbedThumbnail)
+        {
+            Add(startInfo, "--embed-thumbnail");
         }
 
         Add(startInfo, options.Url);
@@ -175,7 +245,8 @@ public sealed class DownloaderService
 
     private static async Task ReadOutputAsync(
         StreamReader reader,
-        IProgress<DownloadProgress>? progress)
+        IProgress<DownloadProgress>? progress,
+        Action<string>? capture = null)
     {
         while (await reader.ReadLineAsync() is { } line)
         {
@@ -183,6 +254,8 @@ public sealed class DownloaderService
             {
                 continue;
             }
+
+            capture?.Invoke(line);
 
             double? percentage = null;
             var match = PercentageRegex.Match(line);

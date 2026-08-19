@@ -2,170 +2,347 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="VideoDownLoader"
-        Width="860"
-        Height="720"
-        MinWidth="720"
-        MinHeight="620"
+        Width="1180"
+        Height="820"
+        MinWidth="960"
+        MinHeight="680"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
         WindowStartupLocation="CenterScreen"
         Loaded="Window_Loaded"
         Closing="Window_Closing">
-    <Grid Margin="26">
+    <Grid Margin="22">
         <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock FontSize="30" FontWeight="SemiBold" Text="VideoDownLoader" />
-            <TextBlock Margin="0,5,0,0"
-                       Foreground="{StaticResource MutedBrush}"
-                       Text="Простой загрузчик доступных HLS/DASH-потоков без работы с DRM." />
-        </StackPanel>
-
-        <Border Grid.Row="1"
-                Padding="18"
-                Margin="0,0,0,14"
-                Background="{StaticResource PanelBrush}"
-                CornerRadius="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="2" Margin="0,0,0,7" Text="Ссылка на видео или прямой эфир" />
-                <TextBox x:Name="UrlTextBox"
-                         Grid.Row="1"
-                         Grid.ColumnSpan="2"
-                         MinHeight="38"
-                         VerticalContentAlignment="Center"
-                         ToolTip="Например: ссылка YouTube или прямой .m3u8/.mpd URL" />
-
-                <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Margin="0,15,0,7" Text="Папка для сохранения" />
-                <TextBox x:Name="OutputDirectoryTextBox"
-                         Grid.Row="3"
-                         Grid.Column="0"
-                         Margin="0,0,10,0"
-                         MinHeight="38"
-                         VerticalContentAlignment="Center" />
-                <Button x:Name="BrowseButton"
-                        Grid.Row="3"
-                        Grid.Column="1"
-                        Click="BrowseButton_Click"
-                        Content="Обзор…" />
-            </Grid>
-        </Border>
-
-        <Border Grid.Row="2"
-                Padding="18"
-                Margin="0,0,0,14"
-                Background="{StaticResource PanelBrush}"
-                CornerRadius="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-
-                <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,12,7" Text="Качество" />
-                <TextBlock Grid.Row="0" Grid.Column="1" Margin="0,0,0,7" Text="Контейнер" />
-
-                <ComboBox x:Name="QualityComboBox" Grid.Row="1" Grid.Column="0" Margin="0,0,12,0" SelectedIndex="0">
-                    <ComboBoxItem Content="Лучшее доступное" />
-                    <ComboBoxItem Content="До 1080p" />
-                    <ComboBoxItem Content="До 720p" />
-                    <ComboBoxItem Content="Только аудио (MP3)" />
-                </ComboBox>
-                <ComboBox x:Name="ContainerComboBox" Grid.Row="1" Grid.Column="1" SelectedIndex="0">
-                    <ComboBoxItem Content="MKV" />
-                    <ComboBoxItem Content="MP4" />
-                </ComboBox>
-            </Grid>
-        </Border>
-
-        <Grid Grid.Row="3" Margin="0,0,0,14">
+        <Grid Grid.Row="0" Margin="0,0,0,18">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*" />
                 <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-                <CheckBox x:Name="PlaylistCheckBox" Margin="0,0,20,0" Content="Загрузить плейлист" />
-                <CheckBox x:Name="LiveFromStartCheckBox"
-                          Content="Эфир с начала DVR"
-                          ToolTip="Работает только там, где источник предоставляет предыдущие сегменты эфира." />
+            <StackPanel>
+                <TextBlock FontSize="30" FontWeight="SemiBold" Text="VideoDownLoader" />
+                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                           Text="Анализ, очередь и загрузка доступного видео без обхода DRM." />
             </StackPanel>
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="InstallToolsButton"
-                        Margin="0,0,10,0"
-                        Click="InstallToolsButton_Click"
-                        Content="Установить инструменты" />
-                <Button x:Name="DownloadButton"
-                        Width="120"
-                        Margin="0,0,10,0"
-                        Background="{StaticResource AccentBrush}"
-                        Foreground="#082F49"
-                        FontWeight="SemiBold"
-                        Click="DownloadButton_Click"
-                        Content="Загрузить" />
-                <Button x:Name="CancelButton"
-                        Width="90"
-                        IsEnabled="False"
-                        Click="CancelButton_Click"
-                        Content="Отмена" />
+            <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                <TextBlock x:Name="ToolsStatusTextBlock" HorizontalAlignment="Right"
+                           Foreground="{StaticResource MutedBrush}" />
+                <Button x:Name="InstallToolsButton" Margin="0,7,0,0"
+                        Click="InstallToolsButton_Click" Content="Установить инструменты" />
             </StackPanel>
         </Grid>
 
-        <Border Grid.Row="4"
-                Padding="14"
-                Background="{StaticResource PanelBrush}"
-                CornerRadius="10">
-            <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-                <TextBlock x:Name="StatusTextBlock" FontWeight="SemiBold" Text="Проверка инструментов…" />
-                <ProgressBar x:Name="DownloadProgressBar"
-                             Grid.Row="1"
-                             Height="8"
-                             Margin="0,10,0,12"
-                             Maximum="100" />
-                <TextBox x:Name="LogTextBox"
-                         Grid.Row="2"
-                         Padding="8"
-                         AcceptsReturn="True"
-                         FontFamily="Consolas"
-                         FontSize="12"
-                         IsReadOnly="True"
-                         TextWrapping="Wrap"
-                         VerticalScrollBarVisibility="Auto" />
-            </Grid>
-        </Border>
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="430" />
+                <ColumnDefinition Width="18" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-        <StackPanel Grid.Row="5" Margin="0,14,0,0" Orientation="Horizontal">
-            <TextBlock x:Name="ToolsStatusTextBlock"
-                       VerticalAlignment="Center"
-                       Foreground="{StaticResource MutedBrush}" />
-            <Button x:Name="OpenFolderButton"
-                    Margin="14,0,0,0"
-                    Padding="10,5"
-                    Click="OpenFolderButton_Click"
-                    Content="Открыть папку" />
-        </StackPanel>
+            <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <Border Padding="16" Background="{StaticResource PanelBrush}" CornerRadius="10">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,7" Text="Ссылка на видео, плейлист или эфир" />
+                            <TextBox x:Name="UrlTextBox" MinHeight="40" VerticalContentAlignment="Center"
+                                     ToolTip="HTTP/HTTPS-ссылка на страницу, .m3u8 или .mpd" />
+                            <Grid Margin="0,10,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Button x:Name="PasteButton" Click="PasteButton_Click" Content="Вставить" />
+                                <Button x:Name="AnalyzeButton" Grid.Column="2"
+                                        Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                                        FontWeight="SemiBold" Click="AnalyzeButton_Click"
+                                        Content="Проверить ссылку" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <Border x:Name="AnalysisPanel" Margin="0,12,0,0" Padding="14"
+                            Background="{StaticResource PanelBrush}" CornerRadius="10" Visibility="Collapsed">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="112" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Border Width="104" Height="68" Background="#111827" CornerRadius="6" ClipToBounds="True">
+                                    <Image x:Name="ThumbnailImage" Stretch="UniformToFill" />
+                                </Border>
+                                <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                    <TextBlock x:Name="AnalysisTitleTextBlock" FontSize="15" FontWeight="SemiBold"
+                                               TextWrapping="Wrap" />
+                                    <TextBlock x:Name="AnalysisDetailsTextBlock" Margin="0,5,0,0"
+                                               Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                            <Border x:Name="DrmWarningBorder" Margin="0,12,0,0" Padding="10"
+                                    Background="#4C1D1D" CornerRadius="6" Visibility="Collapsed">
+                                <TextBlock x:Name="DrmWarningTextBlock" Foreground="#FCA5A5" TextWrapping="Wrap" />
+                            </Border>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Margin="0,12,0,0" Padding="16" Background="{StaticResource PanelBrush}" CornerRadius="10">
+                        <StackPanel>
+                            <TextBlock Margin="0,0,0,7" Text="Папка для сохранения" />
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBox x:Name="OutputDirectoryTextBox" MinHeight="38" VerticalContentAlignment="Center" />
+                                <Button x:Name="BrowseButton" Grid.Column="1" Margin="8,0,0,0"
+                                        Click="BrowseButton_Click" Content="Обзор…" />
+                            </Grid>
+
+                            <TextBlock Margin="0,14,0,7" Text="Формат из анализа" />
+                            <ComboBox x:Name="FormatComboBox" DisplayMemberPath="DisplayName"
+                                      SelectionChanged="FormatComboBox_SelectionChanged" />
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Margin="0,0,8,0">
+                                    <TextBlock Margin="0,0,0,6" Text="Качество" />
+                                    <ComboBox x:Name="QualityComboBox" SelectionChanged="QualityComboBox_SelectionChanged">
+                                        <ComboBoxItem Content="Лучшее" />
+                                        <ComboBoxItem Content="До 1080p" />
+                                        <ComboBoxItem Content="До 720p" />
+                                        <ComboBoxItem Content="Только аудио" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Margin="4,0">
+                                    <TextBlock Margin="0,0,0,6" Text="Контейнер" />
+                                    <ComboBox x:Name="ContainerComboBox">
+                                        <ComboBoxItem Content="MKV" />
+                                        <ComboBoxItem Content="MP4" />
+                                        <ComboBoxItem Content="WebM" />
+                                    </ComboBox>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2" Margin="8,0,0,0">
+                                    <TextBlock Margin="0,0,0,6" Text="Аудио" />
+                                    <ComboBox x:Name="AudioFormatComboBox">
+                                        <ComboBoxItem Content="MP3" />
+                                        <ComboBoxItem Content="M4A" />
+                                        <ComboBoxItem Content="Opus" />
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+
+                            <Border Margin="0,12,0,0" Padding="10" Background="#111827" CornerRadius="6">
+                                <StackPanel>
+                                    <TextBlock FontWeight="SemiBold" Text="Устойчивость YouTube" />
+                                    <Grid Margin="0,9,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock VerticalAlignment="Center" Text="Канал yt-dlp:" />
+                                        <ComboBox x:Name="YtDlpChannelComboBox" Grid.Column="1" Margin="8,0,0,0"
+                                                  SelectionChanged="YtDlpChannelComboBox_SelectionChanged"
+                                                  ToolTip="Nightly быстрее получает исправления YouTube; stable консервативнее.">
+                                            <ComboBoxItem Content="Nightly (рекомендуется)" />
+                                            <ComboBoxItem Content="Stable" />
+                                        </ComboBox>
+                                    </Grid>
+                                    <CheckBox x:Name="AutoRepairYouTubeCheckBox" Margin="0,9,0,0"
+                                              Content="Автоматически обновить компоненты и повторить один раз" />
+                                    <CheckBox x:Name="PoTokenProviderCheckBox" Margin="0,9,0,0"
+                                              Checked="PoTokenProviderCheckBox_Changed"
+                                              Unchecked="PoTokenProviderCheckBox_Changed"
+                                              Content="Использовать внешний PO Token provider" />
+                                    <TextBox x:Name="PoTokenProviderUrlTextBox" Margin="0,7,0,0"
+                                             IsEnabled="False" Text="http://127.0.0.1:4416"
+                                             ToolTip="Адрес совместимого bgutil HTTP provider. Приложение не запускает сторонний сервер автоматически." />
+                                    <Grid Margin="0,7,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="PoTokenProviderStatusTextBlock" VerticalAlignment="Center"
+                                                   Foreground="{StaticResource MutedBrush}" Text="Provider не проверен" />
+                                        <Button x:Name="CheckPoTokenProviderButton" Grid.Column="1" Padding="8,3"
+                                                IsEnabled="False" Click="CheckPoTokenProviderButton_Click"
+                                                Content="Проверить" />
+                                    </Grid>
+                                </StackPanel>
+                            </Border>
+
+                            <WrapPanel Margin="0,14,0,0">
+                                <CheckBox x:Name="PlaylistCheckBox" Margin="0,0,18,8" Content="Весь плейлист" />
+                                <CheckBox x:Name="LiveFromStartCheckBox" Margin="0,0,18,8" Content="Эфир с начала DVR" />
+                                <CheckBox x:Name="MetadataCheckBox" Margin="0,0,18,8" Content="Метаданные" />
+                                <CheckBox x:Name="ThumbnailCheckBox" Margin="0,0,18,8" Content="Обложка" />
+                                <CheckBox x:Name="SubtitlesCheckBox" Margin="0,0,18,8"
+                                          Checked="SubtitlesCheckBox_Changed" Unchecked="SubtitlesCheckBox_Changed"
+                                          Content="Субтитры" />
+                            </WrapPanel>
+                            <Grid x:Name="SubtitleOptionsGrid" Margin="0,4,0,0" Visibility="Collapsed">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" Text="Языки:" />
+                                <TextBox x:Name="SubtitleLanguagesTextBox" Grid.Column="1" Margin="8,0,0,0"
+                                         ToolTip="Например: ru,en или all" />
+                            </Grid>
+
+                            <Grid Margin="0,12,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock VerticalAlignment="Center" Text="Cookies:" />
+                                <ComboBox x:Name="CookieBrowserComboBox" Grid.Column="1" Margin="8,0,0,0"
+                                          ToolTip="Cookies читаются yt-dlp напрямую из выбранного браузера и не сохраняются приложением.">
+                                    <ComboBoxItem Content="Не использовать" />
+                                    <ComboBoxItem Content="Chrome" />
+                                    <ComboBoxItem Content="Edge" />
+                                    <ComboBoxItem Content="Firefox" />
+                                    <ComboBoxItem Content="Brave" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Button x:Name="AddToQueueButton" Margin="0,15,0,0" HorizontalAlignment="Stretch"
+                                    Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                                    FontWeight="SemiBold" IsEnabled="False" Click="AddToQueueButton_Click"
+                                    Content="Добавить в очередь" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+
+            <TabControl Grid.Column="2" Background="{StaticResource PanelBrush}" BorderThickness="0">
+                <TabItem Header="Очередь">
+                    <Grid Margin="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Задания" />
+                            <Button x:Name="StartQueueButton" Grid.Column="1" Margin="0,0,8,0"
+                                    Click="StartQueueButton_Click" Content="Запустить очередь" />
+                            <Button x:Name="CancelButton" Grid.Column="2" IsEnabled="False"
+                                    Click="CancelButton_Click" Content="Остановить" />
+                        </Grid>
+                        <ListView x:Name="QueueListView" Grid.Row="1" Background="Transparent" BorderThickness="0">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" Padding="12" Background="#111827" CornerRadius="7">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Margin="0,0,8,0" FontWeight="SemiBold" Text="{Binding Title}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                            <StackPanel Grid.Column="1" Orientation="Horizontal">
+                                                <Button Margin="0,0,6,0" Padding="8,3" Click="RetryQueueItem_Click" Content="Повторить" />
+                                                <Button Padding="8,3" Click="RemoveQueueItem_Click" Content="Удалить" />
+                                            </StackPanel>
+                                            <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Height="7" Margin="0,10,0,7"
+                                                         Maximum="100" Value="{Binding Progress}" />
+                                            <TextBlock Grid.Row="2" Grid.ColumnSpan="2" Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding StatusText}" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="История">
+                    <Grid Margin="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Margin="0,0,0,12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="Последние загрузки" />
+                            <Button Grid.Column="1" Click="ClearHistoryButton_Click" Content="Очистить" />
+                        </Grid>
+                        <ListView x:Name="HistoryListView" Grid.Row="1" Background="Transparent" BorderThickness="0">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" Padding="12" Background="#111827" CornerRadius="7">
+                                        <Grid>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Grid.Row="1" Margin="0,5,8,0" Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding Result}" TextWrapping="Wrap" />
+                                            <TextBlock Grid.Row="2" Margin="0,5,0,0" Foreground="{StaticResource MutedBrush}"
+                                                       Text="{Binding Timestamp, StringFormat={}{0:g}}" />
+                                            <StackPanel Grid.RowSpan="3" Grid.Column="1" Margin="10,0,0,0">
+                                                <Button Margin="0,0,0,6" Padding="8,3" Click="OpenHistoryFolder_Click" Content="Папка" />
+                                                <Button Padding="8,3" Click="ReuseHistoryUrl_Click" Content="Ссылка" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </TabItem>
+                <TabItem Header="Журнал">
+                    <Grid Margin="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Button HorizontalAlignment="Right" Margin="0,0,0,8" Padding="9,4"
+                                Click="CopyDiagnosticsButton_Click" Content="Копировать диагностику" />
+                        <TextBox x:Name="LogTextBox" Grid.Row="1" Padding="10" AcceptsReturn="True"
+                                 FontFamily="Consolas" FontSize="12" IsReadOnly="True" TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto" />
+                    </Grid>
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal">
+                <ProgressBar x:Name="GlobalProgressBar" Width="160" Height="7" Margin="0,0,12,0" Maximum="100" />
+                <TextBlock x:Name="StatusTextBlock" VerticalAlignment="Center" Text="Готово." />
+            </StackPanel>
+            <Button Grid.Column="1" Padding="10,5" Click="OpenFolderButton_Click" Content="Открыть папку" />
+        </Grid>
     </Grid>
 </Window>
