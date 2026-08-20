@@ -273,6 +273,154 @@
                         </ListView>
                     </Grid>
                 </TabItem>
+                <TabItem Header="Изображения">
+                    <Grid Margin="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock FontSize="16" FontWeight="SemiBold"
+                                   Text="Извлечение изображений со страницы" />
+
+                        <Grid Grid.Row="1" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="WebsiteUrlTextBox" MinHeight="38" VerticalContentAlignment="Center"
+                                     ToolTip="HTTP/HTTPS-ссылка на веб-страницу" />
+                            <Button Grid.Column="1" Margin="8,0,0,0" Click="PasteWebsiteUrlButton_Click"
+                                    Content="Вставить" />
+                            <Button x:Name="AnalyzeImagesButton" Grid.Column="2" Margin="8,0,0,0"
+                                    Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                                    FontWeight="SemiBold" Click="AnalyzeImagesButton_Click"
+                                    Content="Найти" />
+                        </Grid>
+
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" Text="Доступ:" />
+                            <ComboBox x:Name="ImageAccessModeComboBox" Grid.Column="1" Margin="8,0,0,0"
+                                      SelectionChanged="ImageAccessModeComboBox_SelectionChanged">
+                                <ComboBoxItem Content="Без авторизации" />
+                                <ComboBoxItem Content="Встроенный браузер" />
+                            </ComboBox>
+                            <Button x:Name="OpenAuthenticatedBrowserButton" Grid.Column="2" Margin="8,0,0,0"
+                                    IsEnabled="False" Click="OpenAuthenticatedBrowserButton_Click"
+                                    Content="Открыть / войти" />
+                            <TextBlock x:Name="ImageSessionStatusTextBlock" Grid.Column="3" Margin="10,0,0,0"
+                                       VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                       Text="Публичная страница" TextTrimming="CharacterEllipsis" />
+                        </Grid>
+
+                        <Grid Grid.Row="3" Margin="0,12,0,10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock VerticalAlignment="Center" Text="Качество:" />
+                            <ComboBox x:Name="ImageQualityComboBox" Grid.Column="1" Width="180" Margin="8,0,0,0"
+                                      ToolTip="Иконки и изображения меньше выбранного размера исключаются">
+                                <ComboBoxItem Content="От 600 × 300 px" />
+                                <ComboBoxItem Content="От 1200 × 600 px" />
+                                <ComboBoxItem Content="От 400 × 200 px" />
+                            </ComboBox>
+                            <TextBlock Grid.Column="2" Margin="14,0,0,0" VerticalAlignment="Center"
+                                       Text="Вложенность:" />
+                            <ComboBox x:Name="ImageScanDepthComboBox" Grid.Column="3" Width="54" Margin="7,0,0,0"
+                                      ToolTip="Сколько уровней страниц открывать по ссылкам с превью">
+                                <ComboBoxItem Content="0" />
+                                <ComboBoxItem Content="1" />
+                                <ComboBoxItem Content="2" />
+                                <ComboBoxItem Content="3" />
+                            </ComboBox>
+                            <TextBlock x:Name="ImagesSummaryTextBlock" Grid.Column="4" Margin="12,0"
+                                       VerticalAlignment="Center" Foreground="{StaticResource MutedBrush}"
+                                       Text="Изображения ещё не искали" />
+                            <Button Grid.Column="5" Padding="8,3" Click="SelectAllImagesButton_Click"
+                                    Content="Выбрать все" />
+                            <Button Grid.Column="6" Margin="6,0,0,0" Padding="8,3"
+                                    Click="ClearImageSelectionButton_Click" Content="Снять" />
+                        </Grid>
+
+                        <ListView x:Name="WebsiteImagesListView" Grid.Row="4"
+                                  Background="Transparent" BorderThickness="0"
+                                  ScrollViewer.VerticalScrollBarVisibility="Auto">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,0,0,8" Padding="10" Background="#111827" CornerRadius="7">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="112" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <CheckBox Margin="0,0,10,0" VerticalAlignment="Center"
+                                                      IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                                      Checked="WebsiteImageSelection_Changed"
+                                                      Unchecked="WebsiteImageSelection_Changed" />
+                                            <Border Grid.Column="1" Width="104" Height="72"
+                                                    Background="#0B1220" CornerRadius="5" ClipToBounds="True">
+                                                <Image Source="{Binding Preview}" Stretch="UniformToFill" />
+                                            </Border>
+                                            <StackPanel Grid.Column="2" Margin="10,0">
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding DisplayName}"
+                                                           TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           Text="{Binding QualityDescription}" />
+                                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           Text="{Binding Address}" TextTrimming="CharacterEllipsis"
+                                                           ToolTip="{Binding Address}" />
+                                                <TextBlock Margin="0,4,0,0" Foreground="{StaticResource MutedBrush}"
+                                                           Text="{Binding Status}" TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                            <Button Grid.Column="3" Padding="8,3" VerticalAlignment="Center"
+                                                    Click="OpenWebsiteImageButton_Click" Content="Открыть" />
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <Grid Grid.Row="5" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ImageOutputDirectoryTextBox" MinHeight="38"
+                                     VerticalContentAlignment="Center"
+                                     Text="{Binding Text, ElementName=OutputDirectoryTextBox, Mode=TwoWay}" />
+                            <Button Grid.Column="1" Margin="8,0,0,0" Click="BrowseImageFolderButton_Click"
+                                    Content="Обзор…" />
+                            <Button x:Name="CancelImageOperationButton" Grid.Column="2" Margin="8,0,0,0"
+                                    IsEnabled="False" Click="CancelImageOperationButton_Click"
+                                    Content="Отмена" />
+                            <Button x:Name="SaveSelectedImagesButton" Grid.Column="3" Margin="8,0,0,0"
+                                    Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                                    FontWeight="SemiBold" IsEnabled="False"
+                                    Click="SaveSelectedImagesButton_Click" Content="Сохранить выбранные" />
+                        </Grid>
+                    </Grid>
+                </TabItem>
                 <TabItem Header="История">
                     <Grid Margin="14">
                         <Grid.RowDefinitions>

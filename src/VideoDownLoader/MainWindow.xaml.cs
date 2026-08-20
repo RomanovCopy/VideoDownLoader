@@ -36,8 +36,12 @@ public partial class MainWindow : Window
         DarkWindowChromeService.Enable(this);
         QueueListView.ItemsSource = _queue;
         HistoryListView.ItemsSource = _history;
+        WebsiteImagesListView.ItemsSource = _websiteImages;
         FormatComboBox.ItemsSource = new[] { FormatChoice.Automatic };
         FormatComboBox.SelectedIndex = 0;
+        ImageQualityComboBox.SelectedIndex = 0;
+        ImageScanDepthComboBox.SelectedIndex = 1;
+        ImageAccessModeComboBox.SelectedIndex = 0;
     }
 
     private async void Window_Loaded(object sender, RoutedEventArgs e)
@@ -54,7 +58,7 @@ public partial class MainWindow : Window
 
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
-        if ((_isQueueRunning || _isInstalling) &&
+        if ((_isQueueRunning || _isInstalling || _isImageOperationRunning) &&
             MessageBox.Show(
                 this,
                 "Сейчас выполняется операция. Остановить её и закрыть приложение?",
@@ -68,6 +72,7 @@ public partial class MainWindow : Window
 
         SaveApplicationState();
         _operationCancellation?.Cancel();
+        _imageCancellation?.Cancel();
         _downloaderService.Cancel();
     }
 

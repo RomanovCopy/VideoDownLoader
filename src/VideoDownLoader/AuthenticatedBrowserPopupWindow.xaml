@@ -1,0 +1,26 @@
+<Window x:Class="VideoDownLoader.AuthenticatedBrowserPopupWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Вход на сайт"
+        Width="900"
+        Height="680"
+        MinWidth="600"
+        MinHeight="440"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
+        WindowStartupLocation="CenterOwner"
+        Closed="Window_Closed">
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBlock x:Name="PopupStatusTextBlock" Margin="2,0,0,8"
+                   Foreground="{StaticResource MutedBrush}"
+                   Text="Подготовка окна входа…" TextTrimming="CharacterEllipsis" />
+        <Border Grid.Row="1" Background="White" CornerRadius="6" ClipToBounds="True">
+            <wv2:WebView2 x:Name="PopupBrowser" />
+        </Border>
+    </Grid>
+</Window>

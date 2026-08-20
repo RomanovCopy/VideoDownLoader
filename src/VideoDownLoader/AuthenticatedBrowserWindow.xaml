@@ -1,0 +1,70 @@
+<Window x:Class="VideoDownLoader.AuthenticatedBrowserWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Авторизация на сайте"
+        Width="1100"
+        Height="760"
+        MinWidth="820"
+        MinHeight="560"
+        Background="{StaticResource BackgroundBrush}"
+        Foreground="{StaticResource TextBrush}"
+        WindowStartupLocation="CenterOwner"
+        Loaded="Window_Loaded"
+        Closed="Window_Closed">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <Button x:Name="BackButton" Padding="10,5" IsEnabled="False"
+                    Click="BackButton_Click" Content="←" ToolTip="Назад" />
+            <Button x:Name="ForwardButton" Grid.Column="1" Margin="6,0,0,0" Padding="10,5"
+                    IsEnabled="False" Click="ForwardButton_Click" Content="→" ToolTip="Вперёд" />
+            <Button x:Name="RefreshButton" Grid.Column="2" Margin="6,0,0,0" Padding="10,5"
+                    IsEnabled="False" Click="RefreshButton_Click" Content="Обновить" />
+            <TextBox x:Name="AddressTextBox" Grid.Column="3" Margin="8,0,0,0" MinHeight="38"
+                     VerticalContentAlignment="Center" KeyDown="AddressTextBox_KeyDown" />
+            <Button x:Name="NavigateButton" Grid.Column="4" Margin="8,0,0,0"
+                    Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                    FontWeight="SemiBold" IsEnabled="False"
+                    Click="NavigateButton_Click" Content="Перейти" />
+        </Grid>
+
+        <Border Grid.Row="1" Margin="0,10,0,10" Padding="10" Background="{StaticResource PanelBrush}"
+                CornerRadius="6">
+            <TextBlock Foreground="{StaticResource MutedBrush}" TextWrapping="Wrap"
+                       Text="Войдите на сайт обычным способом, откройте нужную страницу и нажмите «Использовать эту страницу». Пароли приложение не читает; cookies остаются в отдельном профиле VideoDownLoader." />
+        </Border>
+
+        <Border Grid.Row="2" Background="White" CornerRadius="6" ClipToBounds="True">
+            <wv2:WebView2 x:Name="Browser" />
+        </Border>
+
+        <Grid Grid.Row="3" Margin="0,10,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock x:Name="BrowserStatusTextBlock" VerticalAlignment="Center"
+                       Foreground="{StaticResource MutedBrush}" Text="Подготовка браузера…" />
+            <Button Grid.Column="1" Margin="8,0,0,0" Click="CancelButton_Click" Content="Отмена" />
+            <Button x:Name="UsePageButton" Grid.Column="2" Margin="8,0,0,0"
+                    Background="{StaticResource AccentBrush}" Foreground="#082F49"
+                    FontWeight="SemiBold" IsEnabled="False"
+                    Click="UsePageButton_Click" Content="Использовать эту страницу" />
+        </Grid>
+    </Grid>
+</Window>
