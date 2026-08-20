@@ -165,6 +165,10 @@ public sealed class DownloaderService
         {
             Add(startInfo, "--no-playlist");
         }
+        else
+        {
+            Add(startInfo, "--yes-playlist");
+        }
 
         if (options.LiveFromStart)
         {

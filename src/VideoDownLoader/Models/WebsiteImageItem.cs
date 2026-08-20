@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -124,13 +125,15 @@ public sealed class WebsiteImageItem : INotifyPropertyChanged
             var image = new BitmapImage();
             image.BeginInit();
             image.CacheOption = BitmapCacheOption.OnLoad;
+            image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
             image.DecodePixelWidth = 208;
             image.StreamSource = stream;
             image.EndInit();
             image.Freeze();
             return image;
         }
-        catch (Exception exception) when (exception is NotSupportedException or IOException)
+        catch (Exception exception) when (exception is NotSupportedException or IOException or
+                                           COMException or InvalidOperationException or ArgumentException)
         {
             return null;
         }

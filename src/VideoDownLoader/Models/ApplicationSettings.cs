@@ -17,6 +17,12 @@ public sealed record ApplicationSettings
     public bool AutoRepairYouTube { get; init; } = true;
     public bool UsePoTokenProvider { get; init; }
     public string PoTokenProviderUrl { get; init; } = "http://127.0.0.1:4416";
+    public string ImageOutputDirectory { get; init; } = string.Empty;
+    public string LastWebsiteUrl { get; init; } = string.Empty;
+    public int ImageQualityPresetIndex { get; init; }
+    public int ImageScanDepth { get; init; } = 1;
+    public int ImageAccessMode { get; init; }
+    public IReadOnlyList<string> FavoriteWebsiteUrls { get; init; } = [];
 }
 
 public sealed record DownloadHistoryEntry(

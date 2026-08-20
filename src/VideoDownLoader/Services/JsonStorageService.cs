@@ -11,9 +11,14 @@ public sealed class JsonStorageService
         WriteIndented = true
     };
 
-    private readonly string _dataDirectory = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "VideoDownLoader");
+    private readonly string _dataDirectory;
+
+    public JsonStorageService(string? dataDirectory = null)
+    {
+        _dataDirectory = dataDirectory ?? Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "VideoDownLoader");
+    }
 
     public ApplicationSettings LoadSettings()
     {

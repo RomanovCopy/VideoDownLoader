@@ -68,6 +68,19 @@ public sealed class DownloaderServiceTests
         Assert.DoesNotContain("--merge-output-format", arguments);
     }
 
+    [Fact]
+    public void AddArguments_Playlist_ExplicitlyEnablesPlaylistDownload()
+    {
+        var startInfo = new ProcessStartInfo();
+        var options = CreateOptions() with { DownloadPlaylist = true };
+
+        DownloaderService.AddArguments(startInfo, CreateTools(), options);
+        var arguments = startInfo.ArgumentList.ToList();
+
+        Assert.Contains("--yes-playlist", arguments);
+        Assert.DoesNotContain("--no-playlist", arguments);
+    }
+
     private static DownloadOptions CreateOptions() => new(
         "https://example.test/video",
         @"C:\downloads",

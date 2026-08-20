@@ -28,6 +28,7 @@ public sealed class WebsiteImageServiceTests
         Assert.Contains(images, image => image.Address == "https://example.test/assets/cover.jpg");
         Assert.Contains(images, image => image.Address == "https://example.test/assets/photos/original.jpg");
         Assert.Contains(images, image => image.Address == "https://example.test/assets/wide-1600.jpg");
+        Assert.DoesNotContain(images, image => image.Address == "https://example.test/assets/wide-800.jpg");
         Assert.Contains(images, image => image.Address == "https://example.test/assets/background.webp");
         Assert.DoesNotContain(images, image => image.Address.EndsWith("favicon.ico", StringComparison.Ordinal));
     }
@@ -209,6 +210,64 @@ public sealed class WebsiteImageServiceTests
         }
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_AcceptsImageBytesWithGenericContentType()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/" => Html("<img src='/misconfigured.bin'>"),
+            "/misconfigured.bin" => Png(1600, 900, "application/octet-stream"),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        var service = new WebsiteImageService(new HttpClient(handler));
+
+        var images = await service.AnalyzeAsync(new Uri("https://example.test/"));
+
+        Assert.Single(images);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_RetriesWithoutRangeWhenServerRejectsIt()
+    {
+        var imageRequests = 0;
+        var handler = new StubHttpMessageHandler(request =>
+        {
+            if (request.RequestUri!.AbsolutePath == "/")
+            {
+                return Html("<img src='/full.png'>");
+            }
+
+            imageRequests++;
+            return request.Headers.Range is null
+                ? Png(1600, 900)
+                : new HttpResponseMessage(HttpStatusCode.RequestedRangeNotSatisfiable);
+        });
+        var service = new WebsiteImageService(new HttpClient(handler));
+
+        var images = await service.AnalyzeAsync(new Uri("https://example.test/"));
+
+        Assert.Single(images);
+        Assert.Equal(2, imageRequests);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_KeepsCompletePreviewWithoutContentLength()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/" => Html("<img src='/chunked.png'>"),
+            "/chunked.png" => ChunkedPng(1600, 900),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        var service = new WebsiteImageService(new HttpClient(handler));
+
+        var images = await service.AnalyzeAsync(new Uri("https://example.test/"));
+
+        var image = Assert.Single(images);
+        Assert.Equal(24, image.FileSize);
+        Assert.NotNull(image.ContentFingerprint);
+    }
+
     private static HttpResponseMessage Html(string html)
     {
         return new HttpResponseMessage(HttpStatusCode.OK)
@@ -217,7 +276,22 @@ public sealed class WebsiteImageServiceTests
         };
     }
 
-    private static HttpResponseMessage Png(int width, int height)
+    private static HttpResponseMessage Png(int width, int height, string mediaType = "image/png")
+    {
+        var data = PngData(width, height);
+        var content = new ByteArrayContent(data);
+        content.Headers.ContentType = new MediaTypeHeaderValue(mediaType);
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    }
+
+    private static HttpResponseMessage ChunkedPng(int width, int height)
+    {
+        var content = new StreamContent(new MemoryStream(PngData(width, height), writable: false));
+        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+    }
+
+    private static byte[] PngData(int width, int height)
     {
         var data = new byte[24];
         data[0] = 0x89;
@@ -226,9 +300,7 @@ public sealed class WebsiteImageServiceTests
         data[3] = 0x47;
         WriteBigEndian(data, 16, width);
         WriteBigEndian(data, 20, height);
-        var content = new ByteArrayContent(data);
-        content.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-        return new HttpResponseMessage(HttpStatusCode.OK) { Content = content };
+        return data;
     }
 
     private static void WriteBigEndian(byte[] data, int offset, int value)

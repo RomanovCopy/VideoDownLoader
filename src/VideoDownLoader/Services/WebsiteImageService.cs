@@ -479,24 +479,47 @@ public sealed partial class WebsiteImageService
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken,
             session);
+        if (response.StatusCode != HttpStatusCode.RequestedRangeNotSatisfiable)
+        {
+            return await ReadProbeResponseAsync(response, uri, cancellationToken);
+        }
+
+        response.Dispose();
+        using var fallbackRequest = CreateRequest(
+            HttpMethod.Get,
+            uri,
+            "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
+            session,
+            referrer);
+        using var fallbackResponse = await SendPolitelyAsync(
+            fallbackRequest,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken,
+            session);
+        return await ReadProbeResponseAsync(fallbackResponse, uri, cancellationToken);
+    }
+
+    private static async Task<ImageProbe?> ReadProbeResponseAsync(
+        HttpResponseMessage response,
+        Uri requestedUri,
+        CancellationToken cancellationToken)
+    {
         response.EnsureSuccessStatusCode();
 
         var mediaType = response.Content.Headers.ContentType?.MediaType;
-        if (mediaType is not null && !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
-        {
-            return null;
-        }
-
-        var data = await ReadAtMostAsync(response.Content, MaximumProbeSize, cancellationToken);
+        var readResult = await ReadAtMostAsync(response.Content, MaximumProbeSize, cancellationToken);
+        var data = readResult.Data;
         var dimensions = ReadDimensions(data, mediaType);
         if (dimensions is null || dimensions.Value.Width <= 0 || dimensions.Value.Height <= 0)
         {
             return null;
         }
 
-        var effectiveUri = response.RequestMessage?.RequestUri ?? uri;
-        var fileSize = response.Content.Headers.ContentRange?.Length ?? response.Content.Headers.ContentLength;
-        var previewData = fileSize is { } knownSize && knownSize == data.LongLength ? data : null;
+        var effectiveUri = response.RequestMessage?.RequestUri ?? requestedUri;
+        var fileSize = response.Content.Headers.ContentRange?.Length ??
+                       response.Content.Headers.ContentLength ??
+                       (readResult.IsComplete ? data.LongLength : null);
+        var previewData = readResult.IsComplete ? data : null;
         var contentFingerprint = previewData is null
             ? null
             : Convert.ToHexString(SHA256.HashData(previewData));
@@ -708,7 +731,7 @@ public sealed partial class WebsiteImageService
         }
     }
 
-    private static async Task<byte[]> ReadAtMostAsync(
+    private static async Task<BoundedReadResult> ReadAtMostAsync(
         HttpContent content,
         int maximumBytes,
         CancellationToken cancellationToken)
@@ -723,13 +746,15 @@ public sealed partial class WebsiteImageService
             var read = await stream.ReadAsync(buffer.AsMemory(0, Math.Min(buffer.Length, remaining)), cancellationToken);
             if (read == 0)
             {
-                break;
+                return new BoundedReadResult(result.ToArray(), true);
             }
 
             result.Write(buffer, 0, read);
         }
 
-        return result.ToArray();
+        var trailingByte = new byte[1];
+        var hasMoreData = await stream.ReadAsync(trailingByte, cancellationToken) != 0;
+        return new BoundedReadResult(result.ToArray(), !hasMoreData);
     }
 
     private static (int Width, int Height)? ReadDimensions(byte[] data, string? mediaType)
@@ -978,11 +1003,34 @@ public sealed partial class WebsiteImageService
             return;
         }
 
+        string? bestAddress = null;
+        double bestDescriptor = double.MinValue;
         foreach (var candidate in srcSet.Split(','))
         {
-            var address = candidate.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-            AddCandidate(found, baseUri, address, source, description);
+            var parts = candidate.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            var address = parts.FirstOrDefault();
+            if (address is null)
+            {
+                continue;
+            }
+
+            var descriptor = parts.Length < 2
+                ? 1d
+                : double.TryParse(
+                    parts[1].TrimEnd('w', 'W', 'x', 'X'),
+                    System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    out var parsed)
+                    ? parsed
+                    : 1d;
+            if (bestAddress is null || descriptor >= bestDescriptor)
+            {
+                bestAddress = address;
+                bestDescriptor = descriptor;
+            }
         }
+
+        AddCandidate(found, baseUri, bestAddress, source, description);
     }
 
     private static void AddCandidate(
@@ -993,6 +1041,11 @@ public sealed partial class WebsiteImageService
         string? description)
     {
         if (!TryResolveUri(baseUri, address, out var resolved))
+        {
+            return;
+        }
+
+        if (LooksLikeIcon(resolved))
         {
             return;
         }
@@ -1135,6 +1188,8 @@ public sealed partial class WebsiteImageService
         string? ContentFingerprint);
 
     private readonly record struct ProbedImage(WebsiteImageItem Candidate, ImageProbe Probe);
+
+    private readonly record struct BoundedReadResult(byte[] Data, bool IsComplete);
 
     private readonly record struct PageResource(Uri Uri, string? Html, bool IsImage);
 }

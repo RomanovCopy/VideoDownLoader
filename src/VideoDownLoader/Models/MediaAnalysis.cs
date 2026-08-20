@@ -13,6 +13,14 @@ public sealed record MediaFormat(
     bool HasAudio,
     bool HasDrm);
 
+public sealed record PlaylistEntry(
+    string Url,
+    string Title,
+    string? Channel,
+    TimeSpan? Duration,
+    string? ThumbnailUrl,
+    bool IsLive);
+
 public sealed record MediaAnalysis(
     string Url,
     string Title,
@@ -25,4 +33,7 @@ public sealed record MediaAnalysis(
     bool HasDrm,
     bool IsDownloadable,
     long? EstimatedFileSize,
-    IReadOnlyList<MediaFormat> Formats);
+    IReadOnlyList<MediaFormat> Formats)
+{
+    public IReadOnlyList<PlaylistEntry> PlaylistEntries { get; init; } = [];
+}

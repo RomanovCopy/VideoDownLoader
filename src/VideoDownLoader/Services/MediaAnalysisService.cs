@@ -30,7 +30,7 @@ public sealed class MediaAnalysisService
             "--dump-single-json",
             "--js-runtimes", $"deno:{tools.Deno}",
             "--skip-download",
-            "--playlist-items", "1");
+            "--flat-playlist");
         if (cookieBrowser != CookieBrowser.None)
         {
             Add(startInfo, "--cookies-from-browser", cookieBrowser.ToString().ToLowerInvariant());
@@ -133,7 +133,10 @@ public sealed class MediaAnalysisService
             hasDrm,
             isDownloadable,
             GetInt64(root, "filesize_approx") ?? GetInt64(root, "filesize"),
-            formats);
+            formats)
+        {
+            PlaylistEntries = ParsePlaylistEntries(root)
+        };
     }
 
     internal static bool IsDrmError(string error) =>
@@ -205,6 +208,52 @@ public sealed class MediaAnalysisService
             .ThenByDescending(format => format.FramesPerSecond ?? 0)
             .ThenByDescending(format => format.FileSize ?? 0)
             .ToList();
+    }
+
+    private static IReadOnlyList<PlaylistEntry> ParsePlaylistEntries(JsonElement root)
+    {
+        if (!root.TryGetProperty("entries", out var entriesElement) ||
+            entriesElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var entries = new List<PlaylistEntry>();
+        var position = 0;
+        foreach (var element in entriesElement.EnumerateArray())
+        {
+            position++;
+            if (element.ValueKind != JsonValueKind.Object || GetEntryUrl(element) is not { } entryUrl)
+            {
+                continue;
+            }
+
+            entries.Add(new PlaylistEntry(
+                entryUrl,
+                GetString(element, "title") ?? $"Без названия (#{position})",
+                GetString(element, "channel") ?? GetString(element, "uploader"),
+                GetDouble(element, "duration") is { } duration ? TimeSpan.FromSeconds(duration) : null,
+                GetString(element, "thumbnail"),
+                GetBoolean(element, "is_live") ||
+                string.Equals(GetString(element, "live_status"), "is_live", StringComparison.Ordinal)));
+        }
+
+        return entries;
+    }
+
+    private static string? GetEntryUrl(JsonElement element)
+    {
+        foreach (var propertyName in new[] { "webpage_url", "original_url", "url" })
+        {
+            var value = GetString(element, propertyName);
+            if (Uri.TryCreate(value, UriKind.Absolute, out var uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps))
+            {
+                return uri.AbsoluteUri;
+            }
+        }
+
+        return null;
     }
 
     private static string GetUsefulError(string error)

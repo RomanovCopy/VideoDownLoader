@@ -31,6 +31,21 @@ public sealed class ThemeContractTests
     }
 
     [Theory]
+    [InlineData("ClearUrlButton", "ClearUrlButton_Click")]
+    [InlineData("ClearThumbnailButton", "ClearThumbnailButton_Click")]
+    [InlineData("ClearQueueButton", "ClearQueueButton_Click")]
+    public void VideoDownload_ClearActions_AreWired(string buttonName, string actionName)
+    {
+        var document = XDocument.Load(Path.Combine(AppContext.BaseDirectory, "TestAssets", "MainWindow.xaml"));
+        var button = document.Descendants(Presentation + "Button")
+            .Single(element => (string?)element.Attribute(Xaml + "Name") == buttonName);
+        var action = button.Attributes()
+            .Single(attribute => attribute.Name.LocalName == "MainWindowBehavior.Action");
+
+        Assert.Equal(actionName, action.Value);
+    }
+
+    [Theory]
     [InlineData("Button")]
     [InlineData("CheckBox")]
     [InlineData("ComboBox")]

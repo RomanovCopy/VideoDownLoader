@@ -120,6 +120,39 @@ public sealed class MediaAnalysisServiceTests
         Assert.False(analysis.IsDownloadable);
     }
 
+    [Fact]
+    public void Parse_Playlist_CollectsAllUsableEntries()
+    {
+        var analysis = Parse("""
+            {
+              "_type": "playlist",
+              "title": "Подборка",
+              "playlist_count": 3,
+              "entries": [
+                {
+                  "title": "Первое видео",
+                  "webpage_url": "https://example.test/watch/one",
+                  "uploader": "Автор",
+                  "duration": 61
+                },
+                {
+                  "title": "Второе видео",
+                  "url": "https://example.test/watch/two"
+                },
+                null
+              ]
+            }
+            """);
+
+        Assert.True(analysis.IsPlaylist);
+        Assert.Equal(3, analysis.PlaylistCount);
+        Assert.Equal(2, analysis.PlaylistEntries.Count);
+        Assert.Equal("https://example.test/watch/one", analysis.PlaylistEntries[0].Url);
+        Assert.Equal("Первое видео", analysis.PlaylistEntries[0].Title);
+        Assert.Equal(TimeSpan.FromSeconds(61), analysis.PlaylistEntries[0].Duration);
+        Assert.Equal("https://example.test/watch/two", analysis.PlaylistEntries[1].Url);
+    }
+
     private static VideoDownLoader.Models.MediaAnalysis Parse(string json)
     {
         using var document = JsonDocument.Parse(json);

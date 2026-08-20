@@ -6,12 +6,13 @@ using System.Windows;
 using VideoDownLoader.Models;
 using VideoDownLoader.Services;
 
-namespace VideoDownLoader;
+namespace VideoDownLoader.Behaviors;
 
-public partial class MainWindow
+public sealed partial class MainWindowBehavior
 {
     private readonly WebsiteImageService _websiteImageService = new();
     private readonly ObservableCollection<WebsiteImageItem> _websiteImages = [];
+    private readonly ObservableCollection<string> _favoriteWebsiteUrls = [];
     private CancellationTokenSource? _imageCancellation;
     private WebsiteBrowserSession? _websiteBrowserSession;
     private bool _isImageOperationRunning;
@@ -32,6 +33,78 @@ public partial class MainWindow
         }
     }
 
+    private void FavoriteWebsiteUrlButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!TryGetWebsiteUri(out var uri))
+        {
+            return;
+        }
+
+        var address = uri.GetComponents(UriComponents.HttpRequestUrl, UriFormat.UriEscaped);
+        var existing = _favoriteWebsiteUrls.FirstOrDefault(item =>
+            item.Equals(address, StringComparison.OrdinalIgnoreCase));
+        if (existing is null)
+        {
+            _favoriteWebsiteUrls.Insert(0, address);
+            while (_favoriteWebsiteUrls.Count > 100)
+            {
+                _favoriteWebsiteUrls.RemoveAt(_favoriteWebsiteUrls.Count - 1);
+            }
+
+            StatusTextBlock.Text = "URL добавлен в избранное.";
+        }
+        else
+        {
+            StatusTextBlock.Text = "Этот URL уже есть в избранном.";
+        }
+
+        WebsiteUrlTextBox.Text = address;
+        SaveApplicationState();
+    }
+
+    private void FavoriteWebsiteUrlsComboBox_SelectionChanged(
+        object sender,
+        System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (FavoriteWebsiteUrlsComboBox.SelectedItem is string address)
+        {
+            WebsiteUrlTextBox.Text = address;
+            WebsiteUrlTextBox.CaretIndex = address.Length;
+        }
+    }
+
+    private void RemoveFavoriteWebsiteUrlButton_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = FavoriteWebsiteUrlsComboBox.SelectedItem as string;
+        if (selected is null)
+        {
+            StatusTextBlock.Text = "Выберите URL в списке избранного.";
+            return;
+        }
+
+        _favoriteWebsiteUrls.Remove(selected);
+        FavoriteWebsiteUrlsComboBox.SelectedIndex = -1;
+        WebsiteUrlTextBox.Text = selected;
+        StatusTextBlock.Text = "URL удалён из избранного.";
+        SaveApplicationState();
+    }
+
+    private void ClearImageSearchButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_isImageOperationRunning)
+        {
+            return;
+        }
+
+        _websiteImages.Clear();
+        WebsiteUrlTextBox.Text = string.Empty;
+        FavoriteWebsiteUrlsComboBox.SelectedIndex = -1;
+        GlobalProgressBar.Value = 0;
+        ImagesSummaryTextBlock.Text = "Результаты очищены";
+        SaveSelectedImagesButton.IsEnabled = false;
+        StatusTextBlock.Text = "Поиск изображений очищен.";
+    }
+
     private async void AnalyzeImagesButton_Click(object sender, RoutedEventArgs e)
     {
         if (_isImageOperationRunning)
@@ -48,7 +121,7 @@ public partial class MainWindow
         if (!Uri.TryCreate(WebsiteUrlTextBox.Text.Trim(), UriKind.Absolute, out var pageUri) ||
             (pageUri.Scheme != Uri.UriSchemeHttp && pageUri.Scheme != Uri.UriSchemeHttps))
         {
-            MessageBox.Show(this, "Введите корректную HTTP/HTTPS-ссылку на страницу.",
+            MessageBox.Show(_window, "Введите корректную HTTP/HTTPS-ссылку на страницу.",
                 "Некорректная ссылка", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -101,7 +174,7 @@ public partial class MainWindow
         {
             StatusTextBlock.Text = "Не удалось извлечь изображения со страницы.";
             AppendLog($"ИЗОБРАЖЕНИЯ: {exception.Message}");
-            MessageBox.Show(this, exception.Message, "Ошибка разбора страницы",
+            MessageBox.Show(_window, exception.Message, "Ошибка разбора страницы",
                 MessageBoxButton.OK, MessageBoxImage.Error);
         }
         finally
@@ -129,7 +202,7 @@ public partial class MainWindow
         var selected = _websiteImages.Where(image => image.IsSelected).ToArray();
         if (selected.Length == 0)
         {
-            MessageBox.Show(this, "Выберите хотя бы одно изображение.", "Нет выбранных изображений",
+            MessageBox.Show(_window, "Выберите хотя бы одно изображение.", "Нет выбранных изображений",
                 MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
@@ -141,7 +214,7 @@ public partial class MainWindow
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or ArgumentException)
         {
-            MessageBox.Show(this, $"Папка недоступна: {exception.Message}", "Ошибка папки",
+            MessageBox.Show(_window, $"Папка недоступна: {exception.Message}", "Ошибка папки",
                 MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
@@ -221,7 +294,7 @@ public partial class MainWindow
                 : GetDefaultOutputDirectory()
         };
 
-        if (dialog.ShowDialog(this) == true)
+        if (dialog.ShowDialog(_window) == true)
         {
             ImageOutputDirectoryTextBox.Text = dialog.FolderName;
         }
@@ -276,7 +349,7 @@ public partial class MainWindow
 
     private bool OpenAuthenticatedBrowser(Uri uri)
     {
-        var browserWindow = new AuthenticatedBrowserWindow(uri) { Owner = this };
+        var browserWindow = new AuthenticatedBrowserWindow(uri) { Owner = _window };
         if (browserWindow.ShowDialog() != true || browserWindow.Session is null)
         {
             return false;
@@ -300,7 +373,7 @@ public partial class MainWindow
         }
 
         uri = null!;
-        MessageBox.Show(this, "Сначала введите HTTP/HTTPS-ссылку на нужный сайт.",
+        MessageBox.Show(_window, "Сначала введите HTTP/HTTPS-ссылку на нужный сайт.",
             "Не указана ссылка", MessageBoxButton.OK, MessageBoxImage.Information);
         return false;
     }
@@ -371,6 +444,10 @@ public partial class MainWindow
     {
         _isImageOperationRunning = isBusy;
         WebsiteUrlTextBox.IsEnabled = !isBusy;
+        FavoriteWebsiteUrlButton.IsEnabled = !isBusy;
+        FavoriteWebsiteUrlsComboBox.IsEnabled = !isBusy;
+        RemoveFavoriteWebsiteUrlButton.IsEnabled = !isBusy;
+        ClearImageSearchButton.IsEnabled = !isBusy;
         AnalyzeImagesButton.IsEnabled = !isBusy;
         ImageQualityComboBox.IsEnabled = !isBusy;
         ImageScanDepthComboBox.IsEnabled = !isBusy;
