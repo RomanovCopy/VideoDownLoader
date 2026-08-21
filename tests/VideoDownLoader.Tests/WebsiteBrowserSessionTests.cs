@@ -5,6 +5,20 @@ namespace VideoDownLoader.Tests;
 public sealed class WebsiteBrowserSessionTests
 {
     [Fact]
+    public void IsForPage_DistinguishesSpaFragments()
+    {
+        var session = new WebsiteBrowserSession(
+            new Uri("https://example.test/gallery#album-1"),
+            "<html></html>",
+            "test",
+            []);
+
+        Assert.True(session.IsForPage(new Uri("https://example.test/gallery#album-1")));
+        Assert.False(session.IsForPage(new Uri("https://example.test/gallery#album-2")));
+        Assert.False(session.IsForPage(new Uri("https://example.test/other#album-1")));
+    }
+
+    [Fact]
     public void BuildCookieHeader_IncludesOnlyCookiesValidForRequest()
     {
         var session = new WebsiteBrowserSession(

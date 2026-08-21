@@ -20,7 +20,8 @@ public sealed class WebsiteImageItem : INotifyPropertyChanged
         int? height = null,
         long? fileSize = null,
         byte[]? previewData = null,
-        string? contentFingerprint = null)
+        string? contentFingerprint = null,
+        Uri? referrer = null)
     {
         Url = url;
         Source = source;
@@ -29,6 +30,7 @@ public sealed class WebsiteImageItem : INotifyPropertyChanged
         Height = height;
         FileSize = fileSize;
         ContentFingerprint = contentFingerprint;
+        Referrer = referrer;
         Preview = CreatePreview(previewData);
     }
 
@@ -45,6 +47,8 @@ public sealed class WebsiteImageItem : INotifyPropertyChanged
     public long? FileSize { get; }
 
     public string? ContentFingerprint { get; }
+
+    public Uri? Referrer { get; }
 
     public ImageSource? Preview { get; }
 

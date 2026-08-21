@@ -32,21 +32,32 @@ public sealed partial class WebsiteImageService
 {
     private const int MaximumHtmlSize = 12 * 1024 * 1024;
     private const int MaximumProbeSize = 384 * 1024;
-    private const int MaximumCandidates = 250;
+    private const int MaximumCandidates = 1000;
+    private const int MaximumResults = 250;
     private const int MaximumPages = 40;
     private static readonly string[] ImageAttributes =
     [
-        "src", "data-src", "data-original", "data-lazy-src", "data-url",
-        "data-full", "data-large", "data-zoom-image"
+        // Сначала проверяем атрибуты, в которых галереи обычно хранят оригинал.
+        "data-full", "data-large", "data-zoom-image", "data-original", "data-original-src",
+        "data-high-res-src", "data-large-image", "data-src-large", "data-orig-file",
+        "data-lazy-src", "data-lazy", "data-src", "data-url", "data-image", "data-thumb",
+        "src"
     ];
 
     private readonly HttpClient _httpClient;
+    private readonly TimeSpan _requestInterval;
     private readonly SemaphoreSlim _requestPacer = new(1, 1);
     private long _lastRequestTimestamp;
 
     public WebsiteImageService(HttpClient? httpClient = null)
+        : this(httpClient ?? CreateHttpClient(), TimeSpan.FromMilliseconds(450))
     {
-        _httpClient = httpClient ?? CreateHttpClient();
+    }
+
+    internal WebsiteImageService(HttpClient httpClient, TimeSpan requestInterval)
+    {
+        _httpClient = httpClient;
+        _requestInterval = requestInterval < TimeSpan.Zero ? TimeSpan.Zero : requestInterval;
     }
 
     public async Task<IReadOnlyList<WebsiteImageItem>> AnalyzeAsync(
@@ -62,7 +73,7 @@ public sealed partial class WebsiteImageService
 
         var discovered = await CrawlAsync(pageUri, scanDepth, session, progress, cancellationToken);
         var candidates = discovered
-            .Where(image => !LooksLikeIcon(image.Url))
+            .Where(candidate => !LooksLikeIcon(candidate.Image.Url))
             .Take(MaximumCandidates)
             .ToArray();
         progress?.Report(new ImageAnalysisProgress(ImageAnalysisStage.Images, 0, candidates.Length));
@@ -75,7 +86,11 @@ public sealed partial class WebsiteImageService
             await gate.WaitAsync(cancellationToken);
             try
             {
-                var probe = await ProbeAsync(candidate.Url, session, pageUri, cancellationToken);
+                var probe = await ProbeAsync(
+                    candidate.Image.Url,
+                    session,
+                    candidate.Referrer,
+                    cancellationToken);
                 if (probe is not null && PassesQualityFilter(probe.Value.Width, probe.Value.Height, quality))
                 {
                     probed[index] = new ProbedImage(candidate, probe.Value);
@@ -88,6 +103,10 @@ public sealed partial class WebsiteImageService
             catch (InvalidOperationException)
             {
                 // Ресурс не является распознаваемым изображением.
+            }
+            catch (IOException)
+            {
+                // Обрыв одного ресурса не должен прерывать проверку остальных.
             }
             finally
             {
@@ -118,20 +137,26 @@ public sealed partial class WebsiteImageService
             }
 
             accepted.Add(new WebsiteImageItem(
-                candidate.Url,
-                candidate.Source,
-                candidate.Description,
+                candidate.Image.Url,
+                candidate.Image.Source,
+                candidate.Image.Description,
                 probe.Width,
                 probe.Height,
                 probe.FileSize,
                 probe.PreviewData,
-                probe.ContentFingerprint));
+                probe.ContentFingerprint,
+                candidate.Referrer));
+
+            if (accepted.Count >= MaximumResults)
+            {
+                break;
+            }
         }
 
         return accepted;
     }
 
-    private async Task<IReadOnlyList<WebsiteImageItem>> CrawlAsync(
+    private async Task<IReadOnlyList<DiscoveredImage>> CrawlAsync(
         Uri startUri,
         int maximumDepth,
         WebsiteBrowserSession? session,
@@ -141,7 +166,7 @@ public sealed partial class WebsiteImageService
         var pending = new Queue<(Uri Uri, int Depth, Uri? Referrer)>();
         var scheduled = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var found = new Dictionary<string, WebsiteImageItem>(StringComparer.OrdinalIgnoreCase);
+        var found = new Dictionary<string, DiscoveredImage>(StringComparer.OrdinalIgnoreCase);
         pending.Enqueue((startUri, 0, null));
         scheduled.Add(GetAddressKey(startUri));
         ReportPageProgress(progress, 0, pending.Count);
@@ -159,7 +184,7 @@ public sealed partial class WebsiteImageService
             PageResource resource;
             try
             {
-                if (depth == 0 && session is not null && AreSamePage(uri, session.PageUri))
+                if (depth == 0 && session?.IsForPage(uri) == true)
                 {
                     resource = new PageResource(session.PageUri, session.Html, false);
                 }
@@ -176,14 +201,17 @@ public sealed partial class WebsiteImageService
 
             if (resource.IsImage)
             {
-                AddCandidate(found, resource.Uri, resource.Uri.AbsoluteUri, "ссылка с превью", null);
+                AddDiscoveredImage(
+                    found,
+                    new WebsiteImageItem(resource.Uri, "ссылка с превью"),
+                    referrer ?? startUri);
                 ReportPageProgress(progress, visited.Count, pending.Count);
                 continue;
             }
 
             foreach (var image in ParseImages(resource.Uri, resource.Html!))
             {
-                AddCandidate(found, image.Url, image.Url.AbsoluteUri, image.Source, image.Description);
+                AddDiscoveredImage(found, image, resource.Uri);
                 if (found.Count >= MaximumCandidates)
                 {
                     break;
@@ -200,7 +228,10 @@ public sealed partial class WebsiteImageService
             {
                 if (LooksLikeImageUrl(link))
                 {
-                    AddCandidate(found, link, link.AbsoluteUri, "оригинал по ссылке превью", null);
+                    AddDiscoveredImage(
+                        found,
+                        new WebsiteImageItem(link, "оригинал по ссылке превью"),
+                        resource.Uri);
                 }
                 else if (scheduled.Count < MaximumPages && scheduled.Add(GetAddressKey(link)))
                 {
@@ -213,6 +244,15 @@ public sealed partial class WebsiteImageService
 
         ReportPageProgress(progress, visited.Count, 0);
         return found.Values.ToArray();
+    }
+
+    private static void AddDiscoveredImage(
+        IDictionary<string, DiscoveredImage> found,
+        WebsiteImageItem image,
+        Uri referrer)
+    {
+        var key = GetAddressKey(image.Url);
+        found.TryAdd(key, new DiscoveredImage(image, referrer));
     }
 
     private async Task<PageResource> FetchPageResourceAsync(
@@ -303,7 +343,7 @@ public sealed partial class WebsiteImageService
             image.Url,
             "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8",
             session,
-            session?.PageUri);
+            image.Referrer ?? session?.PageUri);
         using var response = await SendPolitelyAsync(
             request,
             HttpCompletionOption.ResponseHeadersRead,
@@ -400,14 +440,26 @@ public sealed partial class WebsiteImageService
         foreach (Match tagMatch in SourceTagRegex().Matches(html))
         {
             var tag = tagMatch.Value;
+            AddCandidate(found, baseUri, GetAttribute(tag, "src"), "picture/src", null);
             AddSrcSet(found, baseUri, GetAttribute(tag, "srcset"), "picture/srcset", null);
             AddSrcSet(found, baseUri, GetAttribute(tag, "data-srcset"), "picture/data-srcset", null);
+        }
+
+        foreach (Match tagMatch in PosterTagRegex().Matches(html))
+        {
+            var tag = tagMatch.Value;
+            AddCandidate(found, baseUri, GetAttribute(tag, "poster"), "poster", null);
         }
 
         foreach (Match tagMatch in MetaOrLinkTagRegex().Matches(html))
         {
             var tag = tagMatch.Value;
             var key = GetAttribute(tag, "property") ?? GetAttribute(tag, "name") ?? GetAttribute(tag, "rel");
+            if (tag.StartsWith("<link", StringComparison.OrdinalIgnoreCase) &&
+                string.Equals(GetAttribute(tag, "as"), "image", StringComparison.OrdinalIgnoreCase))
+            {
+                key = "link/as=image";
+            }
             if (key is null || !IsImageMetadataKey(key))
             {
                 continue;
@@ -416,7 +468,7 @@ public sealed partial class WebsiteImageService
             AddCandidate(found, baseUri, GetAttribute(tag, "content") ?? GetAttribute(tag, "href"), key, null);
         }
 
-        foreach (Match match in CssUrlRegex().Matches(html))
+        foreach (Match match in CssUrlRegex().Matches(WebUtility.HtmlDecode(html)))
         {
             AddCandidate(found, baseUri, match.Groups["url"].Value, "CSS", null);
         }
@@ -479,7 +531,7 @@ public sealed partial class WebsiteImageService
             HttpCompletionOption.ResponseHeadersRead,
             cancellationToken,
             session);
-        if (response.StatusCode != HttpStatusCode.RequestedRangeNotSatisfiable)
+        if (!ShouldRetryWithoutRange(response.StatusCode))
         {
             return await ReadProbeResponseAsync(response, uri, cancellationToken);
         }
@@ -497,6 +549,12 @@ public sealed partial class WebsiteImageService
             cancellationToken,
             session);
         return await ReadProbeResponseAsync(fallbackResponse, uri, cancellationToken);
+    }
+
+    private static bool ShouldRetryWithoutRange(HttpStatusCode statusCode)
+    {
+        return statusCode is HttpStatusCode.BadRequest or HttpStatusCode.Forbidden or
+            HttpStatusCode.MethodNotAllowed or HttpStatusCode.RequestedRangeNotSatisfiable;
     }
 
     private static async Task<ImageProbe?> ReadProbeResponseAsync(
@@ -630,7 +688,7 @@ public sealed partial class WebsiteImageService
             if (_lastRequestTimestamp != 0)
             {
                 var elapsed = Stopwatch.GetElapsedTime(_lastRequestTimestamp);
-                var remaining = TimeSpan.FromMilliseconds(450) - elapsed;
+                var remaining = _requestInterval - elapsed;
                 if (remaining > TimeSpan.Zero)
                 {
                     await Task.Delay(remaining, cancellationToken);
@@ -677,16 +735,6 @@ public sealed partial class WebsiteImageService
     {
         return statusCode is HttpStatusCode.MovedPermanently or HttpStatusCode.Found or
             HttpStatusCode.SeeOther or HttpStatusCode.TemporaryRedirect or HttpStatusCode.PermanentRedirect;
-    }
-
-    private static bool AreSamePage(Uri left, Uri right)
-    {
-        return Uri.Compare(
-            left,
-            right,
-            UriComponents.SchemeAndServer | UriComponents.PathAndQuery,
-            UriFormat.SafeUnescaped,
-            StringComparison.OrdinalIgnoreCase) == 0;
     }
 
     private static string GetAddressKey(Uri uri)
@@ -1152,6 +1200,9 @@ public sealed partial class WebsiteImageService
     [GeneratedRegex(@"<source\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex SourceTagRegex();
 
+    [GeneratedRegex(@"<(?:video|body)\b[^>]*\bposter\s*=\s*[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex PosterTagRegex();
+
     [GeneratedRegex(@"<(?:meta|link)\b[^>]*>", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex MetaOrLinkTagRegex();
 
@@ -1187,7 +1238,9 @@ public sealed partial class WebsiteImageService
         Uri EffectiveUri,
         string? ContentFingerprint);
 
-    private readonly record struct ProbedImage(WebsiteImageItem Candidate, ImageProbe Probe);
+    private readonly record struct DiscoveredImage(WebsiteImageItem Image, Uri Referrer);
+
+    private readonly record struct ProbedImage(DiscoveredImage Candidate, ImageProbe Probe);
 
     private readonly record struct BoundedReadResult(byte[] Data, bool IsComplete);
 

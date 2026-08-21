@@ -34,6 +34,22 @@ public sealed class WebsiteImageServiceTests
     }
 
     [Fact]
+    public void ParseImages_FindsCommonLazyPosterPreloadAndEncodedCssSources()
+    {
+        var images = WebsiteImageService.ParseImages(new Uri("https://example.test/gallery/"), """
+            <link rel="preload" as="image" href="/preloaded.webp">
+            <img src="/placeholder.gif" data-original-src="/original.jpg">
+            <video poster="/poster.jpg"></video>
+            <div style="background-image:url(&quot;/encoded-background.png&quot;)"></div>
+            """);
+
+        Assert.Contains(images, image => image.Address == "https://example.test/original.jpg");
+        Assert.Contains(images, image => image.Address == "https://example.test/preloaded.webp");
+        Assert.Contains(images, image => image.Address == "https://example.test/poster.jpg");
+        Assert.Contains(images, image => image.Address == "https://example.test/encoded-background.png");
+    }
+
+    [Fact]
     public void ParsePreviewLinks_FollowsOnlyLinksContainingPreviews()
     {
         var links = WebsiteImageService.ParsePreviewLinks(new Uri("https://example.test/gallery/"), """
@@ -92,6 +108,61 @@ public sealed class WebsiteImageServiceTests
     }
 
     [Fact]
+    public async Task AnalyzeAsync_UsesNestedPageAsImageReferrer()
+    {
+        Uri? imageReferrer = null;
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/" => Html("<a href='/details'><img src='/thumb.png'></a>"),
+            "/details" => Html("<img src='/protected.png'>"),
+            "/thumb.png" => Png(120, 90),
+            "/protected.png" => CaptureProtectedImage(request),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        var service = new WebsiteImageService(new HttpClient(handler), TimeSpan.Zero);
+
+        var images = await service.AnalyzeAsync(
+            new Uri("https://example.test/"),
+            1,
+            ImageQualityPreset.Standard);
+
+        Assert.Single(images);
+        Assert.Equal(new Uri("https://example.test/details"), imageReferrer);
+
+        HttpResponseMessage CaptureProtectedImage(HttpRequestMessage request)
+        {
+            imageReferrer = request.Headers.Referrer;
+            return imageReferrer?.AbsolutePath == "/details"
+                ? Png(1600, 900)
+                : new HttpResponseMessage(HttpStatusCode.Forbidden);
+        }
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_LowQualityUrlsDoNotHideLaterMatchingImage()
+    {
+        var html = new StringBuilder();
+        for (var index = 0; index < 250; index++)
+        {
+            html.Append($"<img src='/small-{index}.png'>");
+        }
+
+        html.Append("<img src='/large.png'>");
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/" => Html(html.ToString()),
+            "/large.png" => Png(1600, 900),
+            _ => Png(100, 100)
+        });
+        var service = new WebsiteImageService(new HttpClient(handler), TimeSpan.Zero);
+
+        var images = await service.AnalyzeAsync(new Uri("https://example.test/"));
+
+        var image = Assert.Single(images);
+        Assert.Equal("https://example.test/large.png", image.Address);
+    }
+
+    [Fact]
     public async Task AnalyzeAsync_UsesBrowserSessionWithoutLeakingCookieAcrossRedirect()
     {
         var observedCookies = new List<(string Host, string? Cookie)>();
@@ -129,6 +200,31 @@ public sealed class WebsiteImageServiceTests
         Assert.Equal("Authenticated Test Browser/1.0", observedUserAgent);
         Assert.Equal("session=secret", observedCookies[0].Cookie);
         Assert.Null(observedCookies[1].Cookie);
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_DoesNotReuseBrowserHtmlForAnotherSpaFragment()
+    {
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.AbsolutePath switch
+        {
+            "/gallery" => Html("<img src='/current.png'>"),
+            "/current.png" => Png(1600, 900),
+            "/previous.png" => Png(1400, 800),
+            _ => new HttpResponseMessage(HttpStatusCode.NotFound)
+        });
+        var service = new WebsiteImageService(new HttpClient(handler), TimeSpan.Zero);
+        var session = new WebsiteBrowserSession(
+            new Uri("https://example.test/gallery#previous"),
+            "<img src='/previous.png'>",
+            "Test Browser/1.0",
+            []);
+
+        var images = await service.AnalyzeAsync(
+            new Uri("https://example.test/gallery#current"),
+            session: session);
+
+        var image = Assert.Single(images);
+        Assert.Equal("https://example.test/current.png", image.Address);
     }
 
     [Fact]

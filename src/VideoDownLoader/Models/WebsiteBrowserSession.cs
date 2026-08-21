@@ -6,6 +6,23 @@ public sealed record WebsiteBrowserSession(
     string UserAgent,
     IReadOnlyList<WebsiteSessionCookie> Cookies)
 {
+    public bool IsForPage(Uri pageUri)
+    {
+        ArgumentNullException.ThrowIfNull(pageUri);
+        return Uri.Compare(
+                   PageUri,
+                   pageUri,
+                   UriComponents.SchemeAndServer,
+                   UriFormat.UriEscaped,
+                   StringComparison.OrdinalIgnoreCase) == 0 &&
+               Uri.Compare(
+                   PageUri,
+                   pageUri,
+                   UriComponents.PathAndQuery | UriComponents.Fragment,
+                   UriFormat.UriEscaped,
+                   StringComparison.Ordinal) == 0;
+    }
+
     public string? BuildCookieHeader(Uri requestUri)
     {
         var now = DateTime.UtcNow;

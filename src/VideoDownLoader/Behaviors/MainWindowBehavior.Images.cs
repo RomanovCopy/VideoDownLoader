@@ -16,6 +16,7 @@ public sealed partial class MainWindowBehavior
     private CancellationTokenSource? _imageCancellation;
     private WebsiteBrowserSession? _websiteBrowserSession;
     private bool _isImageOperationRunning;
+    private long _imageSearchId;
 
     private void PasteWebsiteUrlButton_Click(object sender, RoutedEventArgs e)
     {
@@ -97,11 +98,16 @@ public sealed partial class MainWindowBehavior
         }
 
         _websiteImages.Clear();
+        _websiteBrowserSession = null;
+        _imageSearchId++;
         WebsiteUrlTextBox.Text = string.Empty;
         FavoriteWebsiteUrlsComboBox.SelectedIndex = -1;
         GlobalProgressBar.Value = 0;
         ImagesSummaryTextBlock.Text = "Результаты очищены";
         SaveSelectedImagesButton.IsEnabled = false;
+        ImageSessionStatusTextBlock.Text = ImageAccessModeComboBox.SelectedIndex == 1
+            ? "Сессия ещё не выбрана"
+            : "Публичная страница";
         StatusTextBlock.Text = "Поиск изображений очищен.";
     }
 
@@ -133,7 +139,9 @@ public sealed partial class MainWindowBehavior
 
         _websiteImages.Clear();
         UpdateImagesSummary();
-        _imageCancellation = new CancellationTokenSource();
+        var searchId = ++_imageSearchId;
+        var cancellation = new CancellationTokenSource();
+        _imageCancellation = cancellation;
         SetImageOperationBusy(true);
         GlobalProgressBar.Value = 0;
         StatusTextBlock.Text = "Поиск изображений и проверка качества…";
@@ -142,6 +150,12 @@ public sealed partial class MainWindowBehavior
         {
             var progress = new Progress<ImageAnalysisProgress>(value =>
             {
+                if (searchId != _imageSearchId ||
+                    !ReferenceEquals(_imageCancellation, cancellation))
+                {
+                    return;
+                }
+
                 GlobalProgressBar.Value = value.Total == 0 ? 0 : value.Processed * 100d / value.Total;
                 StatusTextBlock.Text = value.Stage == ImageAnalysisStage.Pages
                     ? $"Обработка страниц: {value.Processed} из {value.Total}…"
@@ -152,7 +166,7 @@ public sealed partial class MainWindowBehavior
                 Math.Max(0, ImageScanDepthComboBox.SelectedIndex),
                 GetImageQualityPreset(),
                 progress,
-                _imageCancellation.Token,
+                cancellation.Token,
                 GetActiveWebsiteSession());
 
             foreach (var image in images)
@@ -179,10 +193,13 @@ public sealed partial class MainWindowBehavior
         }
         finally
         {
-            _imageCancellation.Dispose();
-            _imageCancellation = null;
-            GlobalProgressBar.Value = 0;
-            SetImageOperationBusy(false);
+            cancellation.Dispose();
+            if (ReferenceEquals(_imageCancellation, cancellation))
+            {
+                _imageCancellation = null;
+                GlobalProgressBar.Value = 0;
+                SetImageOperationBusy(false);
+            }
         }
     }
 
@@ -338,8 +355,7 @@ public sealed partial class MainWindowBehavior
             return true;
         }
 
-        if (_websiteBrowserSession is not null &&
-            _websiteBrowserSession.PageUri.Host.Equals(pageUri.Host, StringComparison.OrdinalIgnoreCase))
+        if (_websiteBrowserSession?.IsForPage(pageUri) == true)
         {
             return true;
         }
