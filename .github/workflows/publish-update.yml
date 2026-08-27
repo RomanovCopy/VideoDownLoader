@@ -1,0 +1,113 @@
+name: Publish commit update
+
+on:
+  push:
+    branches:
+      - work
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: publish-commit-update
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    runs-on: windows-latest
+    env:
+      DOTNET_NOLOGO: true
+      DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v7.0.1
+        with:
+          fetch-depth: 1
+
+      - name: Set up .NET 8
+        uses: actions/setup-dotnet@v6.0.0
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Restore and test
+        shell: pwsh
+        run: |
+          dotnet restore .\VideoDownLoader.sln
+          dotnet test .\VideoDownLoader.sln --configuration Release --no-restore
+
+      - name: Publish application
+        shell: pwsh
+        run: |
+          dotnet publish .\src\VideoDownLoader\VideoDownLoader.csproj `
+            --configuration Release `
+            --runtime win-x64 `
+            --self-contained true `
+            --output .\artifacts\publish `
+            /p:SourceRevisionId=${{ github.sha }} `
+            /p:DebugType=None `
+            /p:DebugSymbols=false
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $compilerDirectory = Join-Path $env:RUNNER_TEMP 'InnoSetup673'
+          $compilerInstaller = Join-Path $env:RUNNER_TEMP 'innosetup-6.7.3.exe'
+          gh release download is-6_7_3 `
+            --repo jrsoftware/issrc `
+            --pattern 'innosetup-6.7.3.exe' `
+            --dir $env:RUNNER_TEMP
+          Start-Process `
+            -FilePath $compilerInstaller `
+            -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', "/DIR=$compilerDirectory" `
+            -WindowStyle Hidden `
+            -Wait
+
+          $compiler = Join-Path $compilerDirectory 'ISCC.exe'
+          $publishDirectory = (Resolve-Path .\artifacts\publish).Path
+          $installerDirectory = (New-Item -ItemType Directory -Force -Path .\artifacts\installer).FullName
+          & $compiler `
+            "/DPublishDir=$publishDirectory" `
+            "/DInstallerOutputDir=$installerDirectory" `
+            .\installer\VideoDownLoader.iss
+
+          $deployDirectory = Join-Path $env:RUNNER_TEMP 'VideoDownLoader-update'
+          New-Item -ItemType Directory -Force -Path $deployDirectory | Out-Null
+          Copy-Item `
+            .\artifacts\installer\VideoDownLoader-Setup.exe `
+            (Join-Path $deployDirectory 'VideoDownLoader-Setup.exe')
+
+      - name: Create update manifest
+        shell: pwsh
+        run: |
+          $deployDirectory = Join-Path $env:RUNNER_TEMP 'VideoDownLoader-update'
+          $installerPath = Join-Path $deployDirectory 'VideoDownLoader-Setup.exe'
+          $installer = Get-Item $installerPath
+          $manifest = [ordered]@{
+            commit = '${{ github.sha }}'
+            publishedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+            packageUrl = 'https://raw.githubusercontent.com/RomanovCopy/VideoDownLoader/updates/VideoDownLoader-Setup.exe'
+            sha256 = (Get-FileHash $installerPath -Algorithm SHA256).Hash
+            size = $installer.Length
+          }
+
+          $manifest |
+            ConvertTo-Json |
+            Set-Content -Path (Join-Path $deployDirectory 'manifest.json') -Encoding utf8
+
+      - name: Publish to updates branch
+        shell: pwsh
+        run: |
+          $deployDirectory = Join-Path $env:RUNNER_TEMP 'VideoDownLoader-update'
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git switch --orphan updates-publish
+          git rm -rf .
+          Copy-Item (Join-Path $deployDirectory '*') .
+          git add manifest.json VideoDownLoader-Setup.exe
+          git commit -m "Update ${{ github.sha }}"
+          git push --force origin HEAD:updates
